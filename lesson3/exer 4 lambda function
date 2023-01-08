@@ -1,0 +1,146 @@
+import json
+import boto3
+import time
+
+client = boto3.client('stepfunctions')
+definition = """
+{
+  "StartAt": "SageMaker pre-processing updated",
+  "States": {
+    "SageMaker pre-processing updated": {
+      "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
+      "Parameters": {
+        "ProcessingJobName": "helloblazeprocessingjobv1lam1",
+        "ProcessingInputs": [
+          {
+            "InputName": "input-1",
+            "AppManaged": false,
+            "S3Input": {
+              "S3Uri": "s3://sagemaker-us-east-1-282173087238/less3/reviews_Patio_Lawn_and_Garden_5.json.zip",
+              "LocalPath": "/opt/ml/processing/input",
+              "S3DataType": "S3Prefix",
+              "S3InputMode": "File",
+              "S3DataDistributionType": "FullyReplicated",
+              "S3CompressionType": "None"
+            }
+          },
+          {
+            "InputName": "code",
+            "AppManaged": false,
+            "S3Input": {
+              "S3Uri": "s3://sagemaker-us-east-1-282173087238/less3/HelloBlazePreprocess.py",
+              "LocalPath": "/opt/ml/processing/input/code",
+              "S3DataType": "S3Prefix",
+              "S3InputMode": "File",
+              "S3DataDistributionType": "FullyReplicated",
+              "S3CompressionType": "None"
+            }
+          }
+        ],
+        "ProcessingOutputConfig": {
+          "Outputs": [
+            {
+              "OutputName": "train_data",
+              "AppManaged": false,
+              "S3Output": {
+                "S3Uri": "s3://sagemaker-us-east-1-282173087238/hello_blaze_train_scikit",
+                "LocalPath": "/opt/ml/processing/output/train",
+                "S3UploadMode": "EndOfJob"
+              }
+            },
+            {
+              "OutputName": "test_data",
+              "AppManaged": false,
+              "S3Output": {
+                "S3Uri": "s3://sagemaker-us-east-1-282173087238/hello_blaze_test_scikit",
+                "LocalPath": "/opt/ml/processing/output/test",
+                "S3UploadMode": "EndOfJob"
+              }
+            }
+          ]
+        },
+        "AppSpecification": {
+          "ImageUri": "683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:0.20.0-cpu-py3",
+          "ContainerEntrypoint": [
+            "python3",
+            "/opt/ml/processing/input/code/HelloBlazePreprocess.py"
+          ]
+        },
+        "RoleArn": "arn:aws:iam::282173087238:role/service-role/AmazonSageMaker-ExecutionRole-20221130T014158",
+        "ProcessingResources": {
+          "ClusterConfig": {
+            "InstanceCount": 1,
+            "InstanceType": "ml.m5.xlarge",
+            "VolumeSizeInGB": 30
+          }
+        }
+      },
+      "Type": "Task",
+      "Next": "SageMaker Training Step"
+    },
+    "SageMaker Training Step": {
+      "Resource": "arn:aws:states:::sagemaker:createTrainingJob.sync",
+      "Parameters": {
+        "AlgorithmSpecification": {
+          "TrainingImage": "811284229777.dkr.ecr.us-east-1.amazonaws.com/blazingtext:1",
+          "TrainingInputMode": "File"
+        },
+        "OutputDataConfig": {
+          "S3OutputPath": "s3://sagemaker-us-east-1-282173087238/less3/output"
+        },
+        "StoppingCondition": {
+          "MaxRuntimeInSeconds": 360000
+        },
+        "ResourceConfig": {
+          "VolumeSizeInGB": 30,
+          "InstanceCount": 1,
+          "InstanceType": "ml.m5.xlarge"
+        },
+        "RoleArn": "arn:aws:iam::282173087238:role/service-role/AmazonSageMaker-ExecutionRole-20221130T014158",
+        "InputDataConfig": [
+          {
+            "DataSource": {
+              "S3DataSource": {
+                "S3DataType": "S3Prefix",
+                "S3Uri": "s3://sagemaker-us-east-1-282173087238/hello_blaze_train_scikit",
+                "S3DataDistributionType": "FullyReplicated"
+              }
+            },
+            "ContentType": "text/plain",
+            "ChannelName": "train"
+          },
+          {
+            "DataSource": {
+              "S3DataSource": {
+                "S3DataType": "S3Prefix",
+                "S3Uri": "s3://sagemaker-us-east-1-282173087238/hello_blaze_test_scikit",
+                "S3DataDistributionType": "FullyReplicated"
+              }
+            },
+            "ContentType": "text/plain",
+            "ChannelName": "validation"
+          }
+        ],
+        "HyperParameters": {
+          "mode": "supervised"
+        },
+        "TrainingJobName": "helloblazetrainingjobv1lam1",
+        "DebugHookConfig": {
+          "S3OutputPath": "s3://sagemaker-us-east-1-282173087238/less3/output"
+        }
+      },
+      "Type": "Task",
+      "End": true
+    }
+  }
+}
+"""
+
+
+def lambda_handler(event, context):
+    
+    client.update_state_machine(definition=definition, stateMachineArn='arn:aws:states:us-east-1:282173087238:stateMachine:state-preprocess-train')
+    time.sleep(5)
+    response = client.start_execution(input='{}', name='joblambda8'+str(time.time()), stateMachineArn='arn:aws:states:us-east-1:282173087238:stateMachine:state-preprocess-train')
+    print(response)
+    return 
